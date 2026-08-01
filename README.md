@@ -1,6 +1,14 @@
 # EmlToMarkdown
 Drag an EML file into the application and it will convert to simple Markdown.
 
+# Output
+The converted Markdown is always written to a file rather than the terminal, since
+copying out of a terminal is unreliable. Pass `--output-file` to choose the path
+(it must not already exist); otherwise a temporary `.md` file is created in the
+system temp directory. Once written, the file is opened in the OS's default
+Markdown handler. If it cannot be opened automatically, the full path is printed so
+you can open it yourself.
+
 # Format
 The EML file is parsed and Markdown is generated in the following format:
 
