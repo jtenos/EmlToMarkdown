@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,6 +25,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	input := strings.TrimSpace(*inputFile)
+	if input == "" {
+		// Support drag-and-drop: a single unnamed .eml argument is treated
+		// as the input file.
+		if rest := fs.Args(); len(rest) == 1 && strings.EqualFold(filepath.Ext(rest[0]), ".eml") {
+			input = strings.TrimSpace(rest[0])
+		}
+	}
 	if input == "" {
 		fmt.Fprint(stdout, "Enter the path to the EML file to parse: ")
 		line, err := bufio.NewReader(stdin).ReadString('\n')
