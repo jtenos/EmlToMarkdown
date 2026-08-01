@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,9 +16,23 @@ const fixtureEML = "testdata/plain.eml"
 // fixtureSubject is a line that must appear in the converted output of fixtureEML.
 const fixtureSubject = "### EMAIL: Lunch tomorrow?"
 
+// lastOpened records the path passed to the stubbed file opener during a test.
+var lastOpened string
+
+// TestMain replaces the real OS file opener with a stub so tests never launch a
+// GUI application, and records the path each test opened.
+func TestMain(m *testing.M) {
+	openMarkdownFile = func(path string) error {
+		lastOpened = path
+		return nil
+	}
+	os.Exit(m.Run())
+}
+
 // runHelper invokes run with the given args and stdin, capturing stdout/stderr.
 func runHelper(t *testing.T, args []string, stdin string) (code int, stdout, stderr string) {
 	t.Helper()
+	lastOpened = ""
 	var outBuf, errBuf bytes.Buffer
 	code = run(args, strings.NewReader(stdin), &outBuf, &errBuf)
 	return code, outBuf.String(), errBuf.String()
@@ -45,6 +60,9 @@ func TestRun_OutputToFile(t *testing.T) {
 	if !strings.Contains(stdout, out) {
 		t.Errorf("stdout %q should mention output path %q", stdout, out)
 	}
+	if lastOpened != out {
+		t.Errorf("opened %q, want the output file %q", lastOpened, out)
+	}
 }
 
 func TestRun_OutputFileAlreadyExists(t *testing.T) {
@@ -69,17 +87,30 @@ func TestRun_OutputFileAlreadyExists(t *testing.T) {
 	}
 }
 
-func TestRun_OutputToScreen(t *testing.T) {
-	code, stdout, stderr := runHelper(t, []string{"--input-file", fixtureEML}, "\n")
+func TestRun_OutputToTempFile(t *testing.T) {
+	// With no --output-file, the app writes to a temporary .md file and opens it.
+	code, stdout, stderr := runHelper(t, []string{"--input-file", fixtureEML}, "")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
 	}
-	if !strings.Contains(stdout, fixtureSubject) {
-		t.Errorf("stdout %q should contain the converted content", stdout)
+	if lastOpened == "" {
+		t.Fatal("expected the temporary output file to be opened")
 	}
-	if !strings.Contains(stdout, "PRESS ENTER TO EXIT") {
-		t.Errorf("stdout %q should contain the PRESS ENTER TO EXIT prompt", stdout)
+	t.Cleanup(func() { os.Remove(lastOpened) })
+
+	if !strings.HasSuffix(lastOpened, ".md") {
+		t.Errorf("temp output file %q should have a .md extension", lastOpened)
+	}
+	if !strings.Contains(stdout, lastOpened) {
+		t.Errorf("stdout %q should mention the output path %q", stdout, lastOpened)
+	}
+	data, err := os.ReadFile(lastOpened)
+	if err != nil {
+		t.Fatalf("reading temp output file: %v", err)
+	}
+	if !strings.Contains(string(data), fixtureSubject) {
+		t.Errorf("temp output file %q should contain the converted subject line", string(data))
 	}
 }
 
@@ -131,14 +162,23 @@ func TestRun_PositionalEmlArgumentTreatedAsInput(t *testing.T) {
 
 func TestRun_LonePositionalEmlArgument(t *testing.T) {
 	// The bare drag-and-drop case: the executable is invoked with just the
-	// .eml path and outputs to the screen.
-	code, stdout, stderr := runHelper(t, []string{fixtureEML}, "\n")
+	// .eml path and writes to a temporary file that is then opened.
+	code, _, stderr := runHelper(t, []string{fixtureEML}, "")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
 	}
-	if !strings.Contains(stdout, fixtureSubject) {
-		t.Errorf("stdout %q should contain the converted content", stdout)
+	if lastOpened == "" {
+		t.Fatal("expected the temporary output file to be opened")
+	}
+	t.Cleanup(func() { os.Remove(lastOpened) })
+
+	data, err := os.ReadFile(lastOpened)
+	if err != nil {
+		t.Fatalf("reading temp output file: %v", err)
+	}
+	if !strings.Contains(string(data), fixtureSubject) {
+		t.Errorf("temp output file %q should contain the converted content", string(data))
 	}
 }
 
@@ -175,6 +215,29 @@ func TestRun_InputFileDoesNotExist(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "converting") {
 		t.Errorf("stderr %q should report the conversion error", stderr)
+	}
+}
+
+func TestRun_OpenFailureFallsBackToPrintingPath(t *testing.T) {
+	// When the OS opener fails, the path must still be reported so the user can
+	// open the file themselves.
+	orig := openMarkdownFile
+	openMarkdownFile = func(string) error { return errors.New("no opener available") }
+	t.Cleanup(func() { openMarkdownFile = orig })
+
+	dir := t.TempDir()
+	out := filepath.Join(dir, "result.md")
+
+	code, stdout, stderr := runHelper(t, []string{"--input-file", fixtureEML, "--output-file", out}, "")
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if !strings.Contains(stdout, out) {
+		t.Errorf("stdout %q should mention the output path %q so the user can open it", stdout, out)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Errorf("output file should still be written when opening fails: %v", err)
 	}
 }
 

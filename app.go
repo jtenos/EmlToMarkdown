@@ -46,6 +46,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
+	// An explicit --output-file must not already exist. Check this before doing
+	// any conversion work so the failure is reported promptly.
 	output := strings.TrimSpace(*outputFile)
 	if output != "" {
 		if _, err := os.Stat(output); err == nil {
@@ -63,17 +65,30 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	// Without an explicit --output-file, write to a temporary .md file in the
+	// system temp directory, since copying converted output out of a terminal is
+	// unreliable.
 	if output == "" {
-		fmt.Fprintln(stdout, content)
-		fmt.Fprint(stdout, "PRESS ENTER TO EXIT")
-		_, _ = bufio.NewReader(stdin).ReadString('\n')
-		return 0
+		tmp, err := os.CreateTemp("", "emltomarkdown-*.md")
+		if err != nil {
+			fmt.Fprintf(stderr, "Error creating output file: %v\n", err)
+			return 1
+		}
+		output = tmp.Name()
+		tmp.Close()
 	}
 
 	if err := os.WriteFile(output, []byte(content+"\n"), 0o644); err != nil {
 		fmt.Fprintf(stderr, "Error writing output file: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Wrote output to %s\n", output)
+
+	// Try to open the result in the OS's default Markdown handler. If that fails,
+	// print the path so the user can open it themselves.
+	if err := openMarkdownFile(output); err != nil {
+		fmt.Fprintf(stdout, "Wrote output to %s\n", output)
+	} else {
+		fmt.Fprintf(stdout, "Opened %s\n", output)
+	}
 	return 0
 }
