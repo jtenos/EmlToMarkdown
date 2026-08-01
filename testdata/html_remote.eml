@@ -1,0 +1,14 @@
+From: Newsletter <news@example.com>
+To: John Smith <john@example.com>
+Subject: Weekly Update
+Date: Wed, 16 Jul 2025 08:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+
+<html><body>
+<p>Good morning!</p>
+<p>Featured image:</p>
+<p><img src="https://cdn.example.com/good/banner.png" alt="Banner"></p>
+<p>Broken image:</p>
+<p><img src="https://cdn.example.com/missing/gone.png" alt="Missing"></p>
+</body></html>

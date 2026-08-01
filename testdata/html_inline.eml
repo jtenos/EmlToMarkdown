@@ -1,0 +1,39 @@
+From: "Doe, Jane" <jane@example.com>
+To: John Smith <john@example.com>, Team <team@example.com>
+Subject: =?UTF-8?B?UXVhcnRlcmx5IFJlcG9ydCDwn5OK?=
+Date: Tue, 15 Jul 2025 14:05:33 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="MIXED"
+
+--MIXED
+Content-Type: multipart/related; boundary="RELATED"
+
+--RELATED
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body>
+<p>Hi team,</p>
+<p>Here is our <strong>quarterly</strong> logo:</p>
+<p><img src=3D"cid:logo123" alt=3D"Company Logo"></p>
+<p>Thanks,<br>Jane</p>
+</body></html>
+
+--RELATED
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <logo123>
+Content-Disposition: inline; filename="logo.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhf
+DwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--RELATED--
+--MIXED
+Content-Type: application/pdf; name="report.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="report.pdf"
+
+JVBERi0xLjQKJcOkw7zDtsOfCg==
+
+--MIXED--
