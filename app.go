@@ -86,6 +86,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Try to open the result in the OS's default Markdown handler. If that fails,
 	// print the path so the user can open it themselves.
 	if err := openMarkdownFile(output); err != nil {
+		fmt.Fprintf(stderr, "Error opening output file: %v\n", err)
 		fmt.Fprintf(stdout, "Wrote output to %s\n", output)
 	} else {
 		fmt.Fprintf(stdout, "Opened %s\n", output)
