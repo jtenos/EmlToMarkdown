@@ -8,6 +8,13 @@ import (
 	"testing"
 )
 
+// fixtureEML is a real, parseable EML file used to exercise the parameter
+// handling in run without stubbing the conversion.
+const fixtureEML = "testdata/plain.eml"
+
+// fixtureSubject is a line that must appear in the converted output of fixtureEML.
+const fixtureSubject = "### EMAIL: Lunch tomorrow?"
+
 // runHelper invokes run with the given args and stdin, capturing stdout/stderr.
 func runHelper(t *testing.T, args []string, stdin string) (code int, stdout, stderr string) {
 	t.Helper()
@@ -20,7 +27,7 @@ func TestRun_OutputToFile(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "result.md")
 
-	code, stdout, stderr := runHelper(t, []string{"--input-file", "email.eml", "--output-file", out}, "")
+	code, stdout, stderr := runHelper(t, []string{"--input-file", fixtureEML, "--output-file", out}, "")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
@@ -29,9 +36,11 @@ func TestRun_OutputToFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading output file: %v", err)
 	}
-	want := "File email.eml has been converted\n"
-	if string(data) != want {
-		t.Errorf("output file = %q, want %q", string(data), want)
+	if !strings.Contains(string(data), fixtureSubject) {
+		t.Errorf("output file %q should contain the converted subject line", string(data))
+	}
+	if !strings.HasSuffix(string(data), "\n") {
+		t.Errorf("output file should end with a trailing newline: %q", string(data))
 	}
 	if !strings.Contains(stdout, out) {
 		t.Errorf("stdout %q should mention output path %q", stdout, out)
@@ -45,7 +54,7 @@ func TestRun_OutputFileAlreadyExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, _, stderr := runHelper(t, []string{"--input-file", "email.eml", "--output-file", out}, "")
+	code, _, stderr := runHelper(t, []string{"--input-file", fixtureEML, "--output-file", out}, "")
 
 	if code == 0 {
 		t.Fatalf("exit code = 0, want non-zero for existing output file")
@@ -61,12 +70,12 @@ func TestRun_OutputFileAlreadyExists(t *testing.T) {
 }
 
 func TestRun_OutputToScreen(t *testing.T) {
-	code, stdout, stderr := runHelper(t, []string{"--input-file", "email.eml"}, "\n")
+	code, stdout, stderr := runHelper(t, []string{"--input-file", fixtureEML}, "\n")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
 	}
-	if !strings.Contains(stdout, "File email.eml has been converted") {
+	if !strings.Contains(stdout, fixtureSubject) {
 		t.Errorf("stdout %q should contain the converted content", stdout)
 	}
 	if !strings.Contains(stdout, "PRESS ENTER TO EXIT") {
@@ -79,7 +88,7 @@ func TestRun_PromptsForInputFile(t *testing.T) {
 	out := filepath.Join(dir, "result.md")
 
 	// No --input-file, so the app should prompt and read the path from stdin.
-	code, stdout, stderr := runHelper(t, []string{"--output-file", out}, "prompted.eml\n")
+	code, stdout, stderr := runHelper(t, []string{"--output-file", out}, fixtureEML+"\n")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
@@ -91,8 +100,8 @@ func TestRun_PromptsForInputFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading output file: %v", err)
 	}
-	if want := "File prompted.eml has been converted\n"; string(data) != want {
-		t.Errorf("output file = %q, want %q", string(data), want)
+	if !strings.Contains(string(data), fixtureSubject) {
+		t.Errorf("output file %q should contain the converted subject line", string(data))
 	}
 }
 
@@ -103,7 +112,7 @@ func TestRun_PositionalEmlArgumentTreatedAsInput(t *testing.T) {
 	// A single unnamed .eml argument should be used as the input file,
 	// with no prompt for input. (Go's flag package requires flags to precede
 	// positional arguments.)
-	code, stdout, stderr := runHelper(t, []string{"--output-file", out, "dragged.eml"}, "")
+	code, stdout, stderr := runHelper(t, []string{"--output-file", out, fixtureEML}, "")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
@@ -115,20 +124,20 @@ func TestRun_PositionalEmlArgumentTreatedAsInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading output file: %v", err)
 	}
-	if want := "File dragged.eml has been converted\n"; string(data) != want {
-		t.Errorf("output file = %q, want %q", string(data), want)
+	if !strings.Contains(string(data), fixtureSubject) {
+		t.Errorf("output file %q should contain the converted subject line", string(data))
 	}
 }
 
 func TestRun_LonePositionalEmlArgument(t *testing.T) {
 	// The bare drag-and-drop case: the executable is invoked with just the
 	// .eml path and outputs to the screen.
-	code, stdout, stderr := runHelper(t, []string{"mail.eml"}, "\n")
+	code, stdout, stderr := runHelper(t, []string{fixtureEML}, "\n")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
 	}
-	if !strings.Contains(stdout, "File mail.eml has been converted") {
+	if !strings.Contains(stdout, fixtureSubject) {
 		t.Errorf("stdout %q should contain the converted content", stdout)
 	}
 }
@@ -155,6 +164,17 @@ func TestRun_NoInputFileProvided(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "no input file") {
 		t.Errorf("stderr %q should report the missing input file", stderr)
+	}
+}
+
+func TestRun_InputFileDoesNotExist(t *testing.T) {
+	// A named input file that cannot be opened should fail with a non-zero code.
+	code, _, stderr := runHelper(t, []string{"--input-file", "testdata/nope.eml"}, "")
+	if code == 0 {
+		t.Fatalf("exit code = 0, want non-zero for a missing input file")
+	}
+	if !strings.Contains(stderr, "converting") {
+		t.Errorf("stderr %q should report the conversion error", stderr)
 	}
 }
 

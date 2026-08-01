@@ -57,7 +57,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	content := Convert(input)
+	content, err := Convert(input)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error converting %s: %v\n", input, err)
+		return 1
+	}
 
 	if output == "" {
 		fmt.Fprintln(stdout, content)
