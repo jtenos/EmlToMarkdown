@@ -1,11 +1,14 @@
 BINARY := emltomarkdown
 
-.PHONY: all build test run clean fmt vet
+.PHONY: all build build-win-x64 test run clean fmt vet
 
 all: build
 
 build:
 	go build -o $(BINARY) .
+
+build-win-x64:
+	GOOS=windows GOARCH=amd64 go build -o $(BINARY).exe .
 
 test:
 	go test ./...
