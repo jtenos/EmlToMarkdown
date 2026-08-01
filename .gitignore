@@ -1,0 +1,6 @@
+# Compiled binary
+/emltomarkdown
+/emltomarkdown.exe
+
+# Test artifacts
+*.out
