@@ -1,4 +1,4 @@
-module github.com/jtenos/EmlToMarkdown
+module github.com/jtenos/emltomarkdown
 
 go 1.26
 
