@@ -96,6 +96,56 @@ func TestRun_PromptsForInputFile(t *testing.T) {
 	}
 }
 
+func TestRun_PositionalEmlArgumentTreatedAsInput(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "result.md")
+
+	// A single unnamed .eml argument should be used as the input file,
+	// with no prompt for input. (Go's flag package requires flags to precede
+	// positional arguments.)
+	code, stdout, stderr := runHelper(t, []string{"--output-file", out, "dragged.eml"}, "")
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if strings.Contains(stdout, "Enter the path") {
+		t.Errorf("stdout %q should not prompt when a positional .eml file is given", stdout)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	if want := "File dragged.eml has been converted\n"; string(data) != want {
+		t.Errorf("output file = %q, want %q", string(data), want)
+	}
+}
+
+func TestRun_LonePositionalEmlArgument(t *testing.T) {
+	// The bare drag-and-drop case: the executable is invoked with just the
+	// .eml path and outputs to the screen.
+	code, stdout, stderr := runHelper(t, []string{"mail.eml"}, "\n")
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if !strings.Contains(stdout, "File mail.eml has been converted") {
+		t.Errorf("stdout %q should contain the converted content", stdout)
+	}
+}
+
+func TestRun_PositionalNonEmlArgumentIgnored(t *testing.T) {
+	// A single unnamed argument that is not a .eml file should not be treated
+	// as the input file; the app falls back to prompting.
+	code, stdout, _ := runHelper(t, []string{"notanemail.txt"}, "\n")
+
+	if code == 0 {
+		t.Fatalf("exit code = 0, want non-zero when no valid input file is provided")
+	}
+	if !strings.Contains(stdout, "Enter the path") {
+		t.Errorf("stdout %q should prompt when the positional arg is not a .eml file", stdout)
+	}
+}
+
 func TestRun_NoInputFileProvided(t *testing.T) {
 	// Not passed on the command line and nothing entered at the prompt.
 	code, _, stderr := runHelper(t, []string{}, "\n")
