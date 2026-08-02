@@ -65,17 +65,21 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Without an explicit --output-file, write to a temporary .md file in the
-	// system temp directory, since copying converted output out of a terminal is
-	// unreliable.
+	// Without an explicit --output-file, write alongside the input file, since
+	// copying converted output out of a terminal is unreliable.
 	if output == "" {
-		tmp, err := os.CreateTemp("", "emltomarkdown-*.md")
+		output, err = defaultOutputFile(input)
 		if err != nil {
-			fmt.Fprintf(stderr, "Error creating output file: %v\n", err)
-			return 1
+			// The input's directory may not be writable (read-only media, a
+			// mounted archive, ...), so fall back to the system temp directory.
+			tmp, tmpErr := os.CreateTemp("", "emltomarkdown-*.md")
+			if tmpErr != nil {
+				fmt.Fprintf(stderr, "Error creating output file: %v\n", err)
+				return 1
+			}
+			output = tmp.Name()
+			tmp.Close()
 		}
-		output = tmp.Name()
-		tmp.Close()
 	}
 
 	if err := os.WriteFile(output, []byte(content+"\n"), 0o644); err != nil {
@@ -92,4 +96,33 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "Opened %s\n", output)
 	}
 	return 0
+}
+
+// maxOutputSuffix bounds the counter appended to the default output file name so
+// a directory full of matching names cannot spin forever.
+const maxOutputSuffix = 1000
+
+// defaultOutputFile reserves a new .md file next to the input file, named after
+// it: mail.eml becomes mail.md. An existing file is never overwritten; a counter
+// is appended instead (mail_1.md, mail_2.md, ...). The file is created empty so
+// the name cannot be taken between the check and the later write.
+func defaultOutputFile(input string) (string, error) {
+	dir := filepath.Dir(input)
+	base := strings.TrimSuffix(filepath.Base(input), filepath.Ext(input))
+	for i := 0; i <= maxOutputSuffix; i++ {
+		name := base + ".md"
+		if i > 0 {
+			name = fmt.Sprintf("%s_%d.md", base, i)
+		}
+		candidate := filepath.Join(dir, name)
+		f, err := os.OpenFile(candidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err == nil {
+			f.Close()
+			return candidate, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("no available output file name for %s after %d attempts", input, maxOutputSuffix)
 }
