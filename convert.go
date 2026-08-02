@@ -48,6 +48,13 @@ func buildHeader(h mail.Header, attachments []string) string {
 	fmt.Fprintf(&b, "* Date: %s\n", formatDate(h))
 	fmt.Fprintf(&b, "* From: %s\n", formatAddresses(h.Get("From")))
 	fmt.Fprintf(&b, "* To: %s\n", formatAddresses(h.Get("To")))
+	// Cc/Bcc are usually absent, so they are only listed when present.
+	if cc := formatAddresses(h.Get("Cc")); cc != "" {
+		fmt.Fprintf(&b, "* CC: %s\n", cc)
+	}
+	if bcc := formatAddresses(h.Get("Bcc")); bcc != "" {
+		fmt.Fprintf(&b, "* BCC: %s\n", bcc)
+	}
 	if len(attachments) > 0 {
 		b.WriteString("* Attachments (skipped):\n")
 		for _, name := range attachments {

@@ -1,5 +1,7 @@
 From: "Doe, Jane" <jane@example.com>
 To: John Smith <john@example.com>, Team <team@example.com>
+Cc: =?UTF-8?Q?Ren=C3=A9e_Fran=C3=A7ois?= <renee@example.com>, audit@example.com
+Bcc: Secret Watcher <watcher@example.com>
 Subject: =?UTF-8?B?UXVhcnRlcmx5IFJlcG9ydCDwn5OK?=
 Date: Tue, 15 Jul 2025 14:05:33 +0000
 MIME-Version: 1.0
