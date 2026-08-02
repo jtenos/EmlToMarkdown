@@ -38,6 +38,22 @@ func runHelper(t *testing.T, args []string, stdin string) (code int, stdout, std
 	return code, outBuf.String(), errBuf.String()
 }
 
+// copyFixture copies fixtureEML into a fresh temp directory under the given
+// name, so tests that exercise the default output location write next to a
+// throwaway input file rather than polluting testdata/.
+func copyFixture(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(fixtureEML)
+	if err != nil {
+		t.Fatalf("reading fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("writing fixture copy: %v", err)
+	}
+	return path
+}
+
 func TestRun_OutputToFile(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "result.md")
@@ -87,18 +103,90 @@ func TestRun_OutputFileAlreadyExists(t *testing.T) {
 	}
 }
 
-func TestRun_OutputToTempFile(t *testing.T) {
-	// With no --output-file, the app writes to a temporary .md file and opens it.
-	code, stdout, stderr := runHelper(t, []string{"--input-file", fixtureEML}, "")
+func TestRun_DefaultOutputNextToInputFile(t *testing.T) {
+	// With no --output-file, the app writes "<input base name>.md" in the input
+	// file's own directory and opens it. The name may contain spaces.
+	input := copyFixture(t, "abc 123.eml")
+	want := filepath.Join(filepath.Dir(input), "abc 123.md")
+
+	code, stdout, stderr := runHelper(t, []string{"--input-file", input}, "")
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if lastOpened != want {
+		t.Errorf("opened %q, want %q", lastOpened, want)
+	}
+	if !strings.Contains(stdout, want) {
+		t.Errorf("stdout %q should mention the output path %q", stdout, want)
+	}
+	data, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	if !strings.Contains(string(data), fixtureSubject) {
+		t.Errorf("output file %q should contain the converted subject line", string(data))
+	}
+}
+
+func TestRun_DefaultOutputAddsCounterWhenNameTaken(t *testing.T) {
+	// Existing default-named files are never overwritten; a counter is appended.
+	input := copyFixture(t, "abc 123.eml")
+	dir := filepath.Dir(input)
+	for _, name := range []string{"abc 123.md", "abc 123_1.md"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("do not overwrite"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	code, _, stderr := runHelper(t, []string{"--input-file", input}, "")
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	want := filepath.Join(dir, "abc 123_2.md")
+	if lastOpened != want {
+		t.Errorf("opened %q, want %q", lastOpened, want)
+	}
+	data, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	if !strings.Contains(string(data), fixtureSubject) {
+		t.Errorf("output file %q should contain the converted subject line", string(data))
+	}
+	// The pre-existing files must be left untouched.
+	for _, name := range []string{"abc 123.md", "abc 123_1.md"} {
+		existing, _ := os.ReadFile(filepath.Join(dir, name))
+		if string(existing) != "do not overwrite" {
+			t.Errorf("existing file %s was modified: %q", name, string(existing))
+		}
+	}
+}
+
+func TestRun_DefaultOutputFallsBackToTempDir(t *testing.T) {
+	// When the input's directory cannot take the output file, the app falls back
+	// to a temporary file rather than failing.
+	input := copyFixture(t, "readonly.eml")
+	dir := filepath.Dir(input)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+
+	code, stdout, stderr := runHelper(t, []string{"--input-file", input}, "")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
 	}
 	if lastOpened == "" {
-		t.Fatal("expected the temporary output file to be opened")
+		t.Fatal("expected a temporary output file to be opened")
 	}
 	t.Cleanup(func() { os.Remove(lastOpened) })
 
+	if strings.HasPrefix(lastOpened, dir) {
+		t.Errorf("output %q should not be in the read-only input directory %q", lastOpened, dir)
+	}
 	if !strings.HasSuffix(lastOpened, ".md") {
 		t.Errorf("temp output file %q should have a .md extension", lastOpened)
 	}
@@ -162,20 +250,22 @@ func TestRun_PositionalEmlArgumentTreatedAsInput(t *testing.T) {
 
 func TestRun_LonePositionalEmlArgument(t *testing.T) {
 	// The bare drag-and-drop case: the executable is invoked with just the
-	// .eml path and writes to a temporary file that is then opened.
-	code, _, stderr := runHelper(t, []string{fixtureEML}, "")
+	// .eml path and writes alongside it, then opens the result.
+	input := copyFixture(t, "dragged.eml")
+
+	code, _, stderr := runHelper(t, []string{input}, "")
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
 	}
-	if lastOpened == "" {
-		t.Fatal("expected the temporary output file to be opened")
+	want := filepath.Join(filepath.Dir(input), "dragged.md")
+	if lastOpened != want {
+		t.Fatalf("opened %q, want %q", lastOpened, want)
 	}
-	t.Cleanup(func() { os.Remove(lastOpened) })
 
 	data, err := os.ReadFile(lastOpened)
 	if err != nil {
-		t.Fatalf("reading temp output file: %v", err)
+		t.Fatalf("reading output file: %v", err)
 	}
 	if !strings.Contains(string(data), fixtureSubject) {
 		t.Errorf("temp output file %q should contain the converted content", string(data))

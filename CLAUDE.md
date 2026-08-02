@@ -29,7 +29,7 @@ go test -run TestConvert -v ./...
 ## CLI behavior
 
 - Input is resolved in priority order: `--input-file`, then a single unnamed `.eml` argument (drag-and-drop), then an interactive stdin prompt.
-- `--output-file` is optional and **must not already exist**; this is checked before any conversion work. Without it, output goes to a temp `*.md` file in the system temp dir (terminal copy-paste is deemed unreliable, so output is never printed to stdout).
+- `--output-file` is optional and **must not already exist**; this is checked before any conversion work. Without it, `defaultOutputFile` writes next to the input file as `<input base name>.md`, appending `_1`, `_2`, ... when that name is taken (created with `O_EXCL`, so an existing file is never overwritten); if the input's directory is not writable it falls back to a temp `*.md` file in the system temp dir. Terminal copy-paste is deemed unreliable, so output is never printed to stdout.
 - After writing, the file is opened in the OS default handler; on failure the path is printed instead.
 
 ## Architecture
