@@ -67,6 +67,51 @@ func TestConvert_HTMLInlineImageAndAttachment(t *testing.T) {
 	if strings.Contains(got, "logo.png") {
 		t.Errorf("embedded inline image should not appear as an attachment:\n%s", got)
 	}
+	// An image the body already showed must not be repeated at the bottom.
+	if n := strings.Count(got, "data:image/png;base64,"); n != 1 {
+		t.Errorf("expected the cid: image to be embedded once, got %d:\n%s", n, got)
+	}
+}
+
+func TestConvert_ImageAttachmentsAppendedToBody(t *testing.T) {
+	got := convertFixture(t, "image_attachment.eml")
+
+	if !strings.HasPrefix(got, "### EMAIL: Photos from the trip") {
+		t.Errorf("unexpected header:\n%s", got)
+	}
+
+	// Renderable image attachments are embedded after the body, in document
+	// order, and are not listed in the header.
+	body := got[strings.Index(got, "Here are the photos."):]
+	want := "Here are the photos.\n\n" +
+		"![photo.png](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==)\n\n" +
+		"![image](data:image/jpeg;base64,ZmFrZS1qcGVnLWJ5dGVz)"
+	if body != want {
+		t.Errorf("body mismatch:\n got:\n%s\nwant:\n%s", body, want)
+	}
+
+	// Everything Markdown cannot render is still reported by name only.
+	for _, c := range []string{"* Attachments (skipped):", "  * scan.tiff", "  * itinerary.pdf"} {
+		if !strings.Contains(got, c) {
+			t.Errorf("output missing %q:\n%s", c, got)
+		}
+	}
+	if strings.Contains(got, "  * photo.png") {
+		t.Errorf("embedded image attachment should not be listed as skipped:\n%s", got)
+	}
+}
+
+func TestIsMarkdownImage(t *testing.T) {
+	for _, mediaType := range []string{"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml", "IMAGE/PNG"} {
+		if !isMarkdownImage(mediaType) {
+			t.Errorf("isMarkdownImage(%q) = false, want true", mediaType)
+		}
+	}
+	for _, mediaType := range []string{"image/tiff", "image/heic", "application/pdf", "text/plain", ""} {
+		if isMarkdownImage(mediaType) {
+			t.Errorf("isMarkdownImage(%q) = true, want false", mediaType)
+		}
+	}
 }
 
 func TestConvert_RemoteImages(t *testing.T) {

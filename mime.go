@@ -14,6 +14,8 @@ import (
 // inlineImage holds the decoded bytes and media type of an embedded image so it
 // can be turned into a data URI when building the body.
 type inlineImage struct {
+	name        string // file name, when the part supplied one
+	contentID   string // Content-ID without angle brackets, when the part supplied one
 	contentType string
 	data        []byte
 }
@@ -24,7 +26,34 @@ type mailParts struct {
 	html        []byte                 // first text/html body found
 	text        []byte                 // first text/plain body found
 	inline      map[string]inlineImage // Content-ID (without angle brackets) -> image
+	images      []inlineImage          // embeddable images, in document order
 	attachments []string               // attachment file names, in document order
+}
+
+// markdownImageTypes are the image media types a Markdown renderer can display
+// from a data URI, since it renders images through an HTML <img>. Image types
+// outside this set (image/tiff, image/heic, ...) are treated as ordinary
+// attachments and listed by name instead.
+var markdownImageTypes = map[string]bool{
+	"image/png":                true,
+	"image/apng":               true,
+	"image/jpeg":               true,
+	"image/jpg":                true, // non-standard, but seen in the wild
+	"image/gif":                true,
+	"image/webp":               true,
+	"image/avif":               true,
+	"image/bmp":                true,
+	"image/x-bmp":              true,
+	"image/x-ms-bmp":           true,
+	"image/svg+xml":            true,
+	"image/x-icon":             true,
+	"image/vnd.microsoft.icon": true,
+}
+
+// isMarkdownImage reports whether a media type can be embedded in Markdown as a
+// base64 data URI.
+func isMarkdownImage(mediaType string) bool {
+	return markdownImageTypes[strings.ToLower(strings.TrimSpace(mediaType))]
 }
 
 // walkPart recursively descends a MIME tree, decoding each leaf and sorting it
@@ -69,18 +98,24 @@ func walkPart(header textproto.MIMEHeader, body io.Reader, parts *mailParts) err
 	filename = decodeWord(filename)
 	contentID := strings.Trim(strings.TrimSpace(header.Get("Content-ID")), "<>")
 	isAttachment := strings.EqualFold(disposition, "attachment")
-	isInline := strings.EqualFold(disposition, "inline")
+
+	isImage := strings.HasPrefix(mediaType, "image/")
 
 	switch {
-	case strings.HasPrefix(mediaType, "image/") && !isAttachment && (contentID != "" || isInline):
-		// An inline image we can embed. It must have a Content-ID for the HTML
-		// body to reference it; without one there is nothing to match against,
-		// so fall back to listing it as an attachment.
+	case isImage && isMarkdownImage(mediaType):
+		// An image we can embed, whether it arrived inline or as an attachment.
+		// A Content-ID lets the HTML body reference it with cid:; it is also
+		// queued for the end of the body, and buildBody drops the ones the body
+		// already displayed.
+		img := inlineImage{name: filename, contentID: contentID, contentType: mediaType, data: data}
 		if contentID != "" {
-			parts.inline[contentID] = inlineImage{contentType: mediaType, data: data}
-		} else {
-			parts.attachments = append(parts.attachments, attachmentName(filename, mediaType))
+			parts.inline[contentID] = img
 		}
+		parts.images = append(parts.images, img)
+	case isImage && !isAttachment && contentID != "":
+		// An image type Markdown cannot reliably render, but the body points at
+		// it by cid:, so embed it anyway and let the renderer decide.
+		parts.inline[contentID] = inlineImage{contentType: mediaType, data: data}
 	case isAttachment:
 		parts.attachments = append(parts.attachments, attachmentName(filename, mediaType))
 	case mediaType == "text/html" && parts.html == nil:

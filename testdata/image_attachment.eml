@@ -1,0 +1,42 @@
+From: Jane Doe <jane@example.com>
+To: John Smith <john@example.com>
+Subject: Photos from the trip
+Date: Wed, 16 Jul 2025 09:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="MIXED"
+
+--MIXED
+Content-Type: text/plain; charset="utf-8"
+
+Here are the photos.
+
+--MIXED
+Content-Type: image/png; name="photo.png"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="photo.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhf
+DwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--MIXED
+Content-Type: image/jpeg
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment
+
+ZmFrZS1qcGVnLWJ5dGVz
+
+--MIXED
+Content-Type: image/tiff; name="scan.tiff"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="scan.tiff"
+
+ZmFrZS10aWZmLWJ5dGVz
+
+--MIXED
+Content-Type: application/pdf; name="itinerary.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="itinerary.pdf"
+
+JVBERi0xLjQKJcOkw7zDtsOfCg==
+
+--MIXED--
