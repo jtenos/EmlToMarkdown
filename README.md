@@ -32,12 +32,22 @@ Attachment contents are not included in the output, but each attachment is liste
 by name in the header under `Attachments (skipped)` so it is clear which files
 were left out. When a message has no attachments, that section is omitted.
 
+Image attachments are the exception: they are embedded in the output (see below)
+rather than skipped, so they are not listed in the header.
+
 # Images
-Images in the body are embedded directly into the Markdown as base64 data URIs so
-the output is self-contained:
+Images are embedded directly into the Markdown as base64 data URIs so the output
+is self-contained:
 
 * Inline images embedded in the message (referenced by `cid:`) are embedded from
   the message itself.
 * Images that point at a URL are fetched and embedded when they can be retrieved.
 * If an image URL cannot be retrieved, a placeholder table containing
   "Failed to load image" is inserted in its place.
+* Image attachments — and inline images the body never references — are appended
+  to the end of the body, in the order they appear in the message, with the file
+  name as the alt text.
+
+Only image types a Markdown renderer can display are embedded (PNG, APNG, JPEG,
+GIF, WebP, AVIF, BMP, SVG and ICO). Other image types (TIFF, HEIC, ...) are
+treated as ordinary attachments and listed by name.

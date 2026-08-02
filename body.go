@@ -26,18 +26,50 @@ type imageFetcher func(url string) (contentType string, data []byte, err error)
 const failedImageMarkdown = "| Failed to load image |\n| --- |"
 
 // buildBody renders the readable message body as Markdown, preferring the HTML
-// part (with images embedded) and falling back to plain text.
+// part (with images embedded) and falling back to plain text. Embeddable images
+// the body itself never displayed are appended to the end.
 func buildBody(parts *mailParts, fetch imageFetcher) (string, error) {
+	// Content-IDs the body referenced, so the same image is not repeated at the
+	// end of the document.
+	used := map[string]bool{}
+
+	var body string
 	if len(parts.html) > 0 {
-		return htmlToMarkdown(parts.html, parts.inline, fetch)
+		md, err := htmlToMarkdown(parts.html, parts.inline, fetch, used)
+		if err != nil {
+			return "", err
+		}
+		body = md
+	} else {
+		body = strings.TrimRight(string(parts.text), " \t\r\n")
 	}
-	return strings.TrimRight(string(parts.text), " \t\r\n"), nil
+
+	return body + trailingImages(parts.images, used), nil
+}
+
+// trailingImages renders the images that never appeared in the body — image
+// attachments, and inline parts nothing referenced — as Markdown images with
+// embedded data URIs, so they are included rather than merely named.
+func trailingImages(images []inlineImage, used map[string]bool) string {
+	var b strings.Builder
+	for _, img := range images {
+		if len(img.data) == 0 || (img.contentID != "" && used[img.contentID]) {
+			continue
+		}
+		alt := img.name
+		if alt == "" {
+			alt = "image"
+		}
+		fmt.Fprintf(&b, "\n\n![%s](%s)", alt, dataURI(img.contentType, img.data))
+	}
+	return b.String()
 }
 
 // htmlToMarkdown resolves image references in the HTML (inline cid: images and
 // remote URLs become data URIs; unreachable URLs become a placeholder table)
-// and converts the result to Markdown.
-func htmlToMarkdown(htmlBody []byte, inline map[string]inlineImage, fetch imageFetcher) (string, error) {
+// and converts the result to Markdown. Content-IDs resolved along the way are
+// recorded in used.
+func htmlToMarkdown(htmlBody []byte, inline map[string]inlineImage, fetch imageFetcher, used map[string]bool) (string, error) {
 	doc, err := html.Parse(strings.NewReader(string(htmlBody)))
 	if err != nil {
 		return "", err
@@ -46,7 +78,7 @@ func htmlToMarkdown(htmlBody []byte, inline map[string]inlineImage, fetch imageF
 	// Placeholder tokens are swapped for the failed-image table after
 	// conversion, so the exact table markup survives HTML escaping.
 	var placeholders []string
-	resolveImages(doc, inline, fetch, &placeholders)
+	resolveImages(doc, inline, fetch, &placeholders, used)
 
 	md, err := newConverter().ConvertNode(doc)
 	if err != nil {
@@ -74,18 +106,18 @@ func newConverter() *converter.Converter {
 
 // resolveImages walks the parsed HTML and rewrites every <img> src so the
 // output is self-contained.
-func resolveImages(n *html.Node, inline map[string]inlineImage, fetch imageFetcher, placeholders *[]string) {
+func resolveImages(n *html.Node, inline map[string]inlineImage, fetch imageFetcher, placeholders *[]string, used map[string]bool) {
 	if n.Type == html.ElementNode && n.DataAtom == atom.Img {
-		rewriteImage(n, inline, fetch, placeholders)
+		rewriteImage(n, inline, fetch, placeholders, used)
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		resolveImages(c, inline, fetch, placeholders)
+		resolveImages(c, inline, fetch, placeholders, used)
 	}
 }
 
 // rewriteImage replaces an <img> node's src with an embedded data URI, or turns
 // the node into a placeholder token when the source cannot be resolved.
-func rewriteImage(n *html.Node, inline map[string]inlineImage, fetch imageFetcher, placeholders *[]string) {
+func rewriteImage(n *html.Node, inline map[string]inlineImage, fetch imageFetcher, placeholders *[]string, used map[string]bool) {
 	src := strings.TrimSpace(getAttr(n, "src"))
 	switch {
 	case src == "" || strings.HasPrefix(src, "data:"):
@@ -95,6 +127,7 @@ func rewriteImage(n *html.Node, inline map[string]inlineImage, fetch imageFetche
 		id := strings.TrimSpace(src[len("cid:"):])
 		if img, ok := inline[id]; ok {
 			setAttr(n, "src", dataURI(img.contentType, img.data))
+			used[id] = true
 			return
 		}
 		replaceWithPlaceholder(n, placeholders)
