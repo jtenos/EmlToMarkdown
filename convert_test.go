@@ -50,9 +50,11 @@ func TestConvert_HTMLInlineImageAndAttachment(t *testing.T) {
 	got := convertFixture(t, "html_inline.eml")
 
 	checks := []string{
-		"### EMAIL: Quarterly Report 📊",                                // RFC 2047 encoded-word subject decoded
-		"* From: Doe, Jane <jane@example.com>",                         // quoted display name
-		"* To: John Smith <john@example.com>, Team <team@example.com>", // address list
+		"### EMAIL: Quarterly Report 📊",                                 // RFC 2047 encoded-word subject decoded
+		"* From: Doe, Jane <jane@example.com>",                          // quoted display name
+		"* To: John Smith <john@example.com>, Team <team@example.com>",  // address list
+		"* CC: Renée François <renee@example.com>, <audit@example.com>", // encoded-word and bare address
+		"* BCC: Secret Watcher <watcher@example.com>",
 		"* Attachments (skipped):",
 		"  * report.pdf",
 		"**quarterly**",                               // HTML converted to Markdown
@@ -128,6 +130,15 @@ func TestConvert_RemoteImages(t *testing.T) {
 func TestConvert_NoAttachmentsSectionWhenNone(t *testing.T) {
 	if got := convertFixture(t, "plain.eml"); strings.Contains(got, "Attachments") {
 		t.Errorf("plain email should have no attachments section:\n%s", got)
+	}
+}
+
+func TestConvert_NoCCOrBCCLinesWhenAbsent(t *testing.T) {
+	got := convertFixture(t, "plain.eml")
+	for _, c := range []string{"* CC:", "* BCC:"} {
+		if strings.Contains(got, c) {
+			t.Errorf("email without Cc/Bcc should not have a %q line:\n%s", c, got)
+		}
 	}
 }
 
